@@ -29,6 +29,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <DocumentationFile>bin\Release\GuruxAMI.Gateway.XML</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="ServiceStack.Common, Version=3.9.45.0, Culture=neutral, processorArchitecture=MSIL">
