@@ -32,13 +32,13 @@
     <DocumentationFile>bin\Release\GuruxAMI.Gateway.XML</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="ServiceStack.Common, Version=3.9.45.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceStack.Common, Version=3.9.71.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\GuruxAMI.Common\packages\ServiceStack.Common.3.9.45\lib\net35\ServiceStack.Common.dll</HintPath>
+      <HintPath>..\GuruxAMI.Common\packages\ServiceStack.Common.3.9.71\lib\net35\ServiceStack.Common.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceStack.Interfaces, Version=3.9.45.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceStack.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\GuruxAMI.Common\packages\ServiceStack.Common.3.9.45\lib\net35\ServiceStack.Interfaces.dll</HintPath>
+      <HintPath>..\GuruxAMI.Common\packages\ServiceStack.Common.3.9.71\lib\net35\ServiceStack.Interfaces.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core">
@@ -90,6 +90,10 @@
     <ProjectReference Include="..\..\GXCom\GXMedias\Gurux.Serial\Development\Gurux.Serial_2008.csproj">
       <Project>{D07A57D7-F2E7-4A0F-95D1-EF3B1FD688F0}</Project>
       <Name>Gurux.Serial_2008</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\GXCom\GXMedias\Gurux.Terminal\Development\Gurux.Terminal_2008.csproj">
+      <Project>{6210C774-782D-4292-AF4C-5998AC70BAFD}</Project>
+      <Name>Gurux.Terminal_2008</Name>
     </ProjectReference>
     <ProjectReference Include="..\GuruxAMI.Client\GuruxAMI.Client_2008.csproj">
       <Project>{D4D7585E-0FB1-4C5F-BD92-303A5691B3A8}</Project>

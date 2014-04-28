@@ -11,10 +11,11 @@ using GuruxAMI.Common;
 using Gurux.Common;
 using Gurux.Communication;
 using Gurux.Serial;
+using Gurux.Terminal;
 
 namespace GuruxAMI.Gateway
 {
-    public partial class Settings : Form, Gurux.Common.IGXPropertyPage
+    partial class Settings : Form, Gurux.Common.IGXPropertyPage
     {
         Form PropertiesForm;
         GXAmiGateway Target;
@@ -29,41 +30,22 @@ namespace GuruxAMI.Gateway
 
         void Gurux.Common.IGXPropertyPage.Initialize()
         {
-            string host = Target.Host;
-            if (host == "*")
+            Target.Initialize();
+            if (Target.Client != null)
             {
-                host = "localhost";
-            }
-            bool webServer = host.StartsWith("http://");
-            if (!webServer && (string.IsNullOrEmpty(host) || Target.Port == 0))
-            {
-                throw new ArgumentException("Invalid url");
-            }
-            if (Target.Client == null)
-            {
-                string baseUr;
-                if (webServer)
+                foreach (GXAmiDataCollector it in Target.Client.GetDataCollectors())
                 {
-                    baseUr = host;
+                    int pos = DataCollectorCB.Items.Add(it);
+                    if (Target.DataCollector == it.Guid)
+                    {
+                        DataCollectorCB.SelectedItem = it;
+                    }
                 }
-                else
+                //Select first Data Collector if not selected.
+                if (DataCollectorCB.SelectedIndex == -1 && DataCollectorCB.Items.Count != 0)
                 {
-                    baseUr = "http://" + host + ":" + Target.Port + "/";
+                    DataCollectorCB.SelectedIndex = 0;
                 }
-                Target.Client = new GXAmiClient(baseUr, Target.UserName, Target.Password);
-            }
-            foreach (GXAmiDataCollector it in Target.Client.GetDataCollectors())
-            {
-                int pos = DataCollectorCB.Items.Add(it);
-                if (Target.DataCollector == it.Guid)
-                {
-                    DataCollectorCB.SelectedItem = it;
-                }
-            }
-            //Select first Data Collector if not selected.
-            if (DataCollectorCB.SelectedIndex == -1 && DataCollectorCB.Items.Count != 0)
-            {
-                DataCollectorCB.SelectedIndex = 0;
             }
         }
 
@@ -80,12 +62,18 @@ namespace GuruxAMI.Gateway
         private void DataCollectorCB_SelectedIndexChanged(object sender, EventArgs e)
         {
             MediaCB.Items.Clear();
-            foreach(string media in (DataCollectorCB.SelectedItem as GXAmiDataCollector).Medias)
+            GXAmiDataCollector dc = DataCollectorCB.SelectedItem as GXAmiDataCollector;
+            Target.DataCollector = dc.Guid;
+            foreach (string media in dc.Medias)
             {
-                MediaCB.Items.Add(media);
-                if (Target.Media == media)
+                //Do not shown Gateway int the media list.
+                if (media != Target.MediaType)
                 {
-                    MediaCB.SelectedItem = media;
+                    MediaCB.Items.Add(media);
+                    if (Target.Media == media)
+                    {
+                        MediaCB.SelectedItem = media;
+                    }
                 }
             }
             //Select first media if not selected.
@@ -100,20 +88,30 @@ namespace GuruxAMI.Gateway
             try
             {
                 MediaFrame.Controls.Clear();
-                GXClient cl = new GXClient();
-                Target.Target = cl.SelectMedia(MediaCB.Text);
-                if (Target.Target == null)
+                if (Target.Target == null || Target.Target.MediaType != MediaCB.Text)
                 {
-                    throw new Exception(MediaCB.Text + " media not found.");
+                    GXClient cl = new GXClient();
+                    Target.Target = cl.SelectMedia(MediaCB.Text);
+                    if (Target.Target == null)
+                    {
+                        throw new Exception(MediaCB.Text + " media not found.");
+                    }
                 }
-                Target.Target.Settings = Target.MediaSettings;
-                if (Target.GXClient.PacketParser != null)
+                if (Target.GXClient != null && Target.GXClient.PacketParser != null)
                 {
                     Target.GXClient.PacketParser.InitializeMedia(Target.GXClient, Target.Target);
+                }
+                if (!string.IsNullOrEmpty(Target.MediaSettings))
+                {
+                    Target.Target.Settings = Target.MediaSettings;
                 }
                 if (Target.Target is GXSerial)
                 {
                     (Target.Target as GXSerial).AvailablePorts = (DataCollectorCB.SelectedItem as GXAmiDataCollector).SerialPorts;
+                }
+                else if (Target.Target is GXTerminal)
+                {
+                    (Target.Target as GXTerminal).AvailablePorts = (DataCollectorCB.SelectedItem as GXAmiDataCollector).SerialPorts;
                 }
                 PropertiesForm = Target.Target.PropertiesForm;
                 ((IGXPropertyPage)PropertiesForm).Initialize();
