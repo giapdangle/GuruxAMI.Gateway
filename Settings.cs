@@ -53,8 +53,9 @@ namespace GuruxAMI.Gateway
         {
             ((IGXPropertyPage)PropertiesForm).Apply();
             Target.DataCollector = (DataCollectorCB.SelectedItem as GXAmiDataCollector).Guid;
-            Target.Media = MediaCB.Text;
-            Target.MediaSettings = Target.Target.Settings;
+            Target.DataCollectorName = (DataCollectorCB.SelectedItem as GXAmiDataCollector).Name;
+            Target.MediaName = MediaCB.Text;
+            Target.MediaSettings = Target.Media.Settings;
         }
 
         #endregion
@@ -64,13 +65,18 @@ namespace GuruxAMI.Gateway
             MediaCB.Items.Clear();
             GXAmiDataCollector dc = DataCollectorCB.SelectedItem as GXAmiDataCollector;
             Target.DataCollector = dc.Guid;
+            List<string> allowerMediaTypes = new List<string>();
+            if (Target.AllowerMediaTypes != null)
+            {
+                allowerMediaTypes.AddRange(Target.AllowerMediaTypes);
+            }
             foreach (string media in dc.Medias)
             {
                 //Do not shown Gateway int the media list.
-                if (media != Target.MediaType)
+                if ((allowerMediaTypes.Count == 0 || allowerMediaTypes.Contains(media)) && media != Target.MediaType)
                 {
                     MediaCB.Items.Add(media);
-                    if (Target.Media == media)
+                    if (Target.MediaName == media)
                     {
                         MediaCB.SelectedItem = media;
                     }
@@ -88,32 +94,32 @@ namespace GuruxAMI.Gateway
             try
             {
                 MediaFrame.Controls.Clear();
-                if (Target.Target == null || Target.Target.MediaType != MediaCB.Text)
+                if (Target.Media == null || Target.Media.MediaType != MediaCB.Text)
                 {
                     GXClient cl = new GXClient();
-                    Target.Target = cl.SelectMedia(MediaCB.Text);
-                    if (Target.Target == null)
+                    Target.Media = cl.SelectMedia(MediaCB.Text);
+                    if (Target.Media == null)
                     {
                         throw new Exception(MediaCB.Text + " media not found.");
                     }
                 }
                 if (Target.GXClient != null && Target.GXClient.PacketParser != null)
                 {
-                    Target.GXClient.PacketParser.InitializeMedia(Target.GXClient, Target.Target);
+                    Target.GXClient.PacketParser.InitializeMedia(Target.GXClient, Target.Media);
                 }
                 if (!string.IsNullOrEmpty(Target.MediaSettings))
                 {
-                    Target.Target.Settings = Target.MediaSettings;
+                    Target.Media.Settings = Target.MediaSettings;
                 }
-                if (Target.Target is GXSerial)
+                if (Target.Media is GXSerial)
                 {
-                    (Target.Target as GXSerial).AvailablePorts = (DataCollectorCB.SelectedItem as GXAmiDataCollector).SerialPorts;
+                    (Target.Media as GXSerial).AvailablePorts = (DataCollectorCB.SelectedItem as GXAmiDataCollector).SerialPorts;
                 }
-                else if (Target.Target is GXTerminal)
+                else if (Target.Media is GXTerminal)
                 {
-                    (Target.Target as GXTerminal).AvailablePorts = (DataCollectorCB.SelectedItem as GXAmiDataCollector).SerialPorts;
+                    (Target.Media as GXTerminal).AvailablePorts = (DataCollectorCB.SelectedItem as GXAmiDataCollector).SerialPorts;
                 }
-                PropertiesForm = Target.Target.PropertiesForm;
+                PropertiesForm = Target.Media.PropertiesForm;
                 ((IGXPropertyPage)PropertiesForm).Initialize();
                 while (PropertiesForm.Controls.Count != 0)
                 {

@@ -14,9 +14,10 @@ using System.ComponentModel;
 
 namespace GuruxAMI.Gateway
 {
-    public class GXAmiGateway : IGXMedia, IDisposable
+    public class GXAmiGateway : IGXMedia, IGXMediaContainer, IDisposable
     {
         internal GXAmiClient Client;
+        bool GatewayGetValue;
         public Gurux.Communication.GXClient GXClient;        
         ClientConnectedEventHandler m_OnClientConnected;
         ClientDisconnectedEventHandler m_OnClientDisconnected;
@@ -38,16 +39,15 @@ namespace GuruxAMI.Gateway
             m_syncBase = new GXSynchronousMediaBase(1024);
             WaitTime = -1;
         }
-
+       
         /// <summary>
         /// Constructor
         /// </summary>
-        public GXAmiGateway(string host, int port, string user, string pw, Gurux.Communication.GXClient gxClient)
+        public GXAmiGateway(string host, string user, string pw, Gurux.Communication.GXClient gxClient)
         {
             m_syncBase = new GXSynchronousMediaBase(1024);
             WaitTime = -1;
             this.Host = host;
-            this.Port = port;
             this.UserName = user;
             this.Password = pw;
             GXClient = gxClient;
@@ -62,6 +62,8 @@ namespace GuruxAMI.Gateway
             WaitTime = -1;
             this.Client = client;
             GXClient = gxClient;
+            Client.OnTasksAdded += new TasksAddedEventHandler(Client_OnTasksAdded);
+            Client.OnTasksClaimed += new TasksClaimedEventHandler(Client_OnTasksClaimed);
         }
 
         #region IDisposable Members
@@ -73,7 +75,7 @@ namespace GuruxAMI.Gateway
                 Client.OnTasksAdded -= new TasksAddedEventHandler(Client_OnTasksAdded);
                 Client.OnTasksClaimed -= new TasksClaimedEventHandler(Client_OnTasksClaimed);
             }
-            Close();
+            (this as IGXMedia).Close();
         }
 
         #endregion
@@ -126,52 +128,35 @@ namespace GuruxAMI.Gateway
                 //DC sends received data from the media.
                 else if (it.TaskType == TaskType.MediaWrite)
                 {
-                    //System.Diagnostics.Debug.WriteLine("Gateway received data: " + it.Id + " " + it.Data);
-                    string[] tmp = it.Data.Split(Environment.NewLine.ToCharArray());
+                    System.Diagnostics.Debug.WriteLine("Gateway received data: " + it.Id + " " + it.Data);
+                    string[] tmp = it.Data.Split(new string[]{"\r\n"}, StringSplitOptions.None);
                     byte[] buff = Gurux.Common.GXCommon.HexToBytes(tmp[tmp.Length - 1], false);
                     int bytes = buff.Length;
-                    if (IsSynchronous)
-                    {
-                        lock (m_syncBase.m_ReceivedSync)
-                        {
-                            int index = m_syncBase.m_ReceivedSize;
-                            m_syncBase.AppendData(buff, 0, bytes);
-                            if (Trace == TraceLevel.Verbose && m_OnTrace != null)
-                            {
-                                TraceEventArgs arg = new TraceEventArgs(TraceTypes.Received, buff, 0, bytes);
-                                m_OnTrace(this, arg);
-                            }
-                            m_syncBase.m_ReceivedEvent.Set();
-                        }
-                    }
-                    else
-                    {
-                        if (m_OnReceived != null)
-                        {
-                            m_syncBase.m_ReceivedSize = 0;
-                            byte[] data = new byte[bytes];
-                            Array.Copy(buff, data, bytes);
-                            if (Trace == TraceLevel.Verbose && m_OnTrace != null)
-                            {
-                                m_OnTrace(this, new TraceEventArgs(TraceTypes.Received, data));
-                            }
-                            m_OnReceived(this, new ReceiveEventArgs(data, DataCollector.ToString()));
-                        }
-                        else if (Trace == TraceLevel.Verbose && m_OnTrace != null)
-                        {
-                            m_OnTrace(this, new TraceEventArgs(TraceTypes.Received, buff, 0, bytes));
-                        }
-                    }
+                    (TargetMedia as IGXVirtualMedia).DataReceived(buff, null);                  
                 }
                 //Remove task.
                 Client.RemoveTask(it);
             }            
         }
 
-        public IGXMedia Target
+        /// <summary>
+        /// Target media of GXMedia Container.
+        /// </summary>
+        public IGXMedia Media
         {
             get
             {
+                if (TargetMedia == null && !string.IsNullOrEmpty(MediaName))
+                {
+                    Initialize();
+                    Gurux.Communication.GXClient cl = new Gurux.Communication.GXClient();
+                    Media = cl.SelectMedia(MediaName);
+                    if (TargetMedia == null)
+                    {
+                        throw new Exception(MediaName + " media not found.");
+                    }                    
+                    TargetMedia.Settings = MediaSettings;
+                }
                 return TargetMedia;
             }
             set
@@ -179,16 +164,144 @@ namespace GuruxAMI.Gateway
                 if (TargetMedia != value)
                 {
                     if (TargetMedia != null)
-                    {
+                    {                        
                         (TargetMedia as INotifyPropertyChanged).PropertyChanged -= new PropertyChangedEventHandler(OnMediaPropertyChanged);
+                        (TargetMedia as IGXVirtualMedia).OnGetPropertyValue -= new GetPropertyValueEventHandler(OnGetPropertyValue);
+                        TargetMedia.OnMediaStateChange -= new MediaStateChangeEventHandler(TargetMedia_OnMediaStateChange);
+                        (TargetMedia as IGXVirtualMedia).OnDataSend -= new ReceivedEventHandler(OnDataSend);                        
                     }
                     TargetMedia = value;
                     if (TargetMedia != null)
                     {
+                        (TargetMedia as IGXVirtualMedia).Virtual = true;
+                        if ((this as IGXMedia).ConfigurableSettings != 0)
+                        {
+                            TargetMedia.ConfigurableSettings = (this as IGXMedia).ConfigurableSettings;
+                        }
+                        (TargetMedia as IGXVirtualMedia).OnGetPropertyValue += new GetPropertyValueEventHandler(OnGetPropertyValue);
                         (TargetMedia as INotifyPropertyChanged).PropertyChanged += new PropertyChangedEventHandler(OnMediaPropertyChanged);
+                        TargetMedia.OnMediaStateChange += new MediaStateChangeEventHandler(TargetMedia_OnMediaStateChange);
+                        (TargetMedia as IGXVirtualMedia).OnDataSend += new ReceivedEventHandler(OnDataSend);                        
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Media sends new data to the device.
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        void OnDataSend(object sender, ReceiveEventArgs e)
+        {
+            if (!IsOpen)
+            {
+                throw new Exception("Media is not open.");
+            }
+            Send(e.Data, e.SenderInfo);
+        }
+
+        void TargetMedia_OnMediaStateChange(object sender, MediaStateEventArgs e)
+        {
+            if (e.State == MediaState.Opening)
+            {
+                OpenMedia();
+            }
+            else if (e.State == MediaState.Closing)
+            {
+                //Mikko (this as IGXMedia).Close();
+                CloseMedia();
+            }
+        }
+
+        public string[] GetPropertyValues(string[] propertyNames)
+        {
+            List<string> values = new List<string>();
+            if (propertyNames != null && propertyNames.Length != 0)
+            {
+                if (!UseCache())
+                {
+                    return Client.GetMediaProperties(DataCollector, Media.MediaType, Media.Name, propertyNames);
+                }                
+                PropertyDescriptorCollection list = TypeDescriptor.GetProperties(Media);
+                foreach (string it in propertyNames)
+                {
+                    object value = list[it].GetValue(Media);
+                    values.Add(Convert.ToString(value));
+                }                
+            }
+            return values.ToArray();
+        }
+
+        public string GetPropertyValue(string propertyName)
+        {
+            if (!UseCache())
+            {                
+                return Client.GetMediaProperties(DataCollector, Media.MediaType, Media.Name, new string[] { propertyName })[0];
+            }
+            PropertyDescriptor prop = TypeDescriptor.GetProperties(Media)[propertyName];
+            object value = prop.GetValue(Media);
+            return Convert.ToString(value);
+        }
+
+        bool UseCache()
+        {            
+            if (!IsOpen)
+            {
+                return true;
+            }
+            if (Media is Gurux.Serial.GXSerial)
+            {
+                PropertyDescriptor prop = TypeDescriptor.GetProperties(Media)["DtrEnable"];
+                if (!Convert.ToBoolean(prop.GetValue(Media)))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public void SetPropertyValues(Dictionary<string, object> properties)
+        {
+            if (properties.Count != 0)
+            {
+                PropertyDescriptorCollection list = TypeDescriptor.GetProperties(Media);
+                foreach (var it in properties)
+                {
+                    list[it.Key].SetValue(Media, it.Value);
+                }
+                if (!UseCache())
+                {
+                    Client.SetMediaProperties(DataCollector, Media.MediaType, Media.Name, properties);
+                }
+            }
+        }
+
+        public void SetPropertyValue(string propertyName, object value)
+        {
+            PropertyDescriptor prop = TypeDescriptor.GetProperties(Media)[propertyName];
+            prop.SetValue(Media, value);
+            if (!UseCache())
+            {
+                OnMediaPropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+            }
+        }
+
+        string OnGetPropertyValue(string propertyName)
+        {
+            try
+            {
+                // Changed properties are saved and updated when connection is established.                
+                if (!GatewayGetValue && IsOpen)
+                {
+                    return Client.GetMediaProperties(DataCollector, Media.MediaType, Media.Name, new string[] { propertyName })[0];
+                }                
+            }
+            catch (Exception ex)
+            {
+                //TODO: Show error. GXCommon.ShowError(this, ex);
+            }
+            return null;
         }
 
         /// <summary>
@@ -203,23 +316,28 @@ namespace GuruxAMI.Gateway
                 // Changed properties are saved and updated when connection is established.                
                 if (IsOpen)
                 {
-                    PropertyDescriptor prop = TypeDescriptor.GetProperties(Target)[e.PropertyName];
-                    object value = prop.GetValue(Target);
+                    GatewayGetValue = true;
+                    PropertyDescriptor prop = TypeDescriptor.GetProperties(Media)[e.PropertyName];
+                    object value = prop.GetValue(Media);
                     Dictionary<string, object> properties = new Dictionary<string, object>();
                     properties.Add(e.PropertyName, value);
-                    Client.SetMediaProperties(DataCollector, Target.MediaType, Target.Settings, properties);
+                    Client.SetMediaProperties(DataCollector, Media.MediaType, Media.Name, properties);
                 }
             }
             catch (Exception ex)
             {
                 //TODO: Show error. GXCommon.ShowError(this, ex);
             }
+            finally
+            {
+                GatewayGetValue = false;
+            }
         }
 
         #region IGXMedia Members
 
         /// <summary>
-        /// GXGateway component sends received data through this method.
+        /// GXAMIGateway component sends received data through this method.
         /// </summary>
         public event ReceivedEventHandler OnReceived
         {
@@ -241,7 +359,7 @@ namespace GuruxAMI.Gateway
             }
             if (Trace >= TraceLevel.Error && m_OnTrace != null)
             {
-                m_OnTrace(this, new TraceEventArgs(TraceTypes.Error, ex));
+                m_OnTrace(this, new TraceEventArgs(TraceTypes.Error, ex, null));
             }
         }
 
@@ -339,17 +457,17 @@ namespace GuruxAMI.Gateway
         {
             get
             {
-                if (Target != null)
+                if (Media != null)
                 {
-                    return Target.Trace;
+                    return Media.Trace;
                 }
                 return TraceLevel.Off;
             }
             set
             {
-                if (Target != null)
+                if (Media != null)
                 {
-                    Target.Trace = value;
+                    Media.Trace = value;
                 }
             }
         }
@@ -358,24 +476,10 @@ namespace GuruxAMI.Gateway
         {
             if (Client == null && !string.IsNullOrEmpty(Host))
             {
-                string host = Host;
-                if (host == "*")
+                string baseUr = Host;
+                if (baseUr.Contains("*"))
                 {
-                    host = "localhost";
-                }
-                bool webServer = host.StartsWith("http://");
-                if (!webServer && (string.IsNullOrEmpty(host) || Port == 0))
-                {
-                    throw new ArgumentException("Invalid url");
-                }
-                string baseUr;
-                if (webServer)
-                {
-                    baseUr = host;
-                }
-                else
-                {
-                    baseUr = "http://" + host + ":" + Port + "/";
+                    baseUr = baseUr.Replace("*", "localhost");
                 }
                 Client = new GXAmiClient(baseUr, UserName, Password);
                 Client.OnTasksAdded += new TasksAddedEventHandler(Client_OnTasksAdded);
@@ -383,23 +487,20 @@ namespace GuruxAMI.Gateway
             }
         }
 
-        public void Open()
+        void IGXMedia.Open()
+        {
+            if (TargetMedia != null)
+            {
+                TargetMedia.Open();
+            }
+        }
+
+        void OpenMedia()
         {
             if (!IsOpen)
             {
                 lock (m_Synchronous)
                 {
-                    Initialize();
-                    if (Target == null)
-                    {
-                        Gurux.Communication.GXClient cl = new Gurux.Communication.GXClient();
-                        Target = cl.SelectMedia(Media);
-                        if (Target == null)
-                        {
-                            throw new Exception(Media + " media not found.");
-                        }
-                        Target.Settings = MediaSettings;
-                    }
                     //Reset last position if Eop is used.
                     lock (m_syncBase.m_ReceivedSync)
                     {
@@ -415,32 +516,14 @@ namespace GuruxAMI.Gateway
                 AutoResetEvent ececuted = new AutoResetEvent(false);
                 GXAmiTask task = null;
                 try
-                {                   
-                    task = Client.MediaOpen(DataCollector, TargetMedia.MediaType, TargetMedia.Settings);
-                    lock (ExecutedEvents)
-                    {
-                        ExecutedEvents.Add(task, ececuted);
-                    }
-                    //System.Diagnostics.Debug.WriteLine("Gateway Open: " + task.Id);
-                    //Wait until Virtual media is open connection.
-                    if (!ececuted.WaitOne(WaitTime))
-                    {
-                        throw new Exception("Open Failed. Wait time occurred.");
-                    }
+                {
+                    task = Client.MediaOpen(DataCollector, TargetMedia.MediaType, TargetMedia.Name, TargetMedia.Settings, ececuted);                    
+                    System.Diagnostics.Debug.WriteLine("Gateway Open: " + task.Id);
                 }
                 catch (Exception)
                 {
                     VirtualOpen = false;
-                }
-                finally
-                {
-                    if (task != null)
-                    {
-                        lock (ExecutedEvents)
-                        {
-                            ExecutedEvents.Remove(task);
-                        }
-                    }
+                    throw;
                 }
             }
         }
@@ -473,7 +556,7 @@ namespace GuruxAMI.Gateway
                             }
                             if (claimed)
                             {
-                                //System.Diagnostics.Debug.WriteLine("Gateway claimed task: " + it.Id);                                
+                                System.Diagnostics.Debug.WriteLine("Gateway claimed task: " + it.Id);                                
                                 break;
                             }
                         }
@@ -492,13 +575,35 @@ namespace GuruxAMI.Gateway
                 }
             }
         }
+
+        /// <summary>
+        /// Abort all tasks on close.
+        /// </summary>
+        void IGXMedia.Close()
+        {
+            if (VirtualOpen)
+            {
+                VirtualOpen = false;
+                if (TargetMedia != null)
+                {
+                    TargetMedia.Close();
+                }
+                lock (ExecutedEvents)
+                {
+                    foreach (AutoResetEvent it in ExecutedEvents.Values)
+                    {
+                        it.Set();
+                    }
+                }
+            }
+        }
      
         /// <summary>
         /// Close Data Collector Media.
-        /// </summary>
-        public void Close()
+        /// </summary>        
+        void CloseMedia()
         {
-            if (Target != null && IsOpen)
+            if (Media != null && IsOpen)
             {
                 if (m_OnMediaStateChange != null)
                 {
@@ -506,43 +611,13 @@ namespace GuruxAMI.Gateway
                 }
                 AutoResetEvent ececuted = new AutoResetEvent(false);
                 GXAmiTask task = null;
-                try
+                lock (m_Synchronous)
                 {
-                    lock (m_Synchronous)
-                    {
-                        task = Client.MediaClose(DataCollector, TargetMedia.MediaType, TargetMedia.Settings);
-                        lock (ExecutedEvents)
-                        {
-                            ExecutedEvents.Add(task, ececuted);
-                        }
-                        //System.Diagnostics.Debug.WriteLine("Gateway Close: " + task.Id);
-                    }
-                    //Wait until Virtual media is closed the connection.
-                    if (!ececuted.WaitOne(WaitTime))
-                    {
-                        lock (m_Synchronous)
-                        {
-                            VirtualOpen = false;
-                        }
-                        Client.StopListenEvents();
-                        throw new Exception("Close Failed. Wait time occurred.");
-                    }
-                    lock (m_Synchronous)
-                    {
-                        VirtualOpen = false;
-                    }
+                    task = Client.MediaClose(DataCollector, TargetMedia.MediaType, TargetMedia.Name, ececuted);
+                    VirtualOpen = false;
+                    Client.StopListenEvents();
+                    System.Diagnostics.Debug.WriteLine("Gateway Close: " + task.Id);
                 }
-                finally
-                {
-                    if (task != null)
-                    {
-                        lock (ExecutedEvents)
-                        {
-                            ExecutedEvents.Remove(task);
-                        }
-                    }
-                }
-                Client.StopListenEvents();
             }
         }
 
@@ -566,39 +641,30 @@ namespace GuruxAMI.Gateway
             {
                 m_syncBase.m_LastPosition = 0;
             }
-            byte[] tmp = (byte[])data;
+            byte[] tmp = Gurux.Common.GXCommon.GetAsByteArray(data);
             AutoResetEvent executed = new AutoResetEvent(false);
             GXAmiTask task = null;
-            try
+            lock (m_Synchronous)
             {
-                lock (m_Synchronous)
-                {
-                    task = Client.Write(DataCollector, Target.MediaType, Target.Settings, tmp, tmp.Length, Eop);
-                    lock (ExecutedEvents)
-                    {                        
-                        ExecutedEvents.Add(task, executed);
-                    }
-                    //System.Diagnostics.Debug.WriteLine("Gateway send data: " + Client.Instance.ToString() + " " + task.Id + " " + task.Data);
-                }                
-                //Wait until data is send (task is claimed).
-                if (!executed.WaitOne(WaitTime))
-                {
-                    throw new Exception("Send Failed. Wait time occurred.");
-                }            
-            }
-            finally
+                task = Client.MediaWrite(DataCollector, Media.MediaType, Media.Name, tmp, executed);
+                System.Diagnostics.Debug.WriteLine("Gateway send data: " + task.Id + " " + task.Data);
+            }                
+            System.Diagnostics.Debug.WriteLine("Gateway handled send task: " + task.Id);
+            if (!IsOpen)
             {
-                if (task != null)
-                {
-                    lock (ExecutedEvents)
-                    {
-                        ExecutedEvents.Remove(task);
-                    }
-                }
+                throw new Exception("Media closed.");
             }
-            //System.Diagnostics.Debug.WriteLine("Gateway handled send task: " + task.Id);
         }
 
+        /// <summary>
+        /// Media types that can be used.
+        /// </summary>
+        public string[] AllowerMediaTypes
+        {
+            get;
+            set;
+        }
+        
         public string MediaType
         {
             get 
@@ -619,7 +685,7 @@ namespace GuruxAMI.Gateway
         {
             get
             {
-                string str = this.DataCollector.ToString() + ";" + Media + ";" + MediaSettings;
+                string str = this.DataCollector.ToString() + ";" + MediaName + ";" + MediaSettings;
                 return str;
             }
             set
@@ -630,10 +696,30 @@ namespace GuruxAMI.Gateway
                     if (arr.Length == 3)
                     {
                         this.DataCollector = new Guid(arr[0]);
-                        Media = arr[1];
+                        MediaName = arr[1];
                         MediaSettings = arr[2];
                     }
                 }
+            }
+        }
+
+        /// <inheritdoc cref="IGXMedia.Tag"/>
+        public object Tag
+        {
+            get;
+            set;
+        }
+
+        /// <inheritdoc cref="IGXMedia.MediaContainer"/>
+        IGXMediaContainer IGXMedia.MediaContainer
+        {
+            get
+            {
+                throw new ArgumentException("There can't be a media container for a gateway.");
+            }
+            set
+            {
+                throw new ArgumentException("There can't be a media container for a gateway.");
             }
         }
 
@@ -642,7 +728,7 @@ namespace GuruxAMI.Gateway
         {
             get 
             {
-                return Target.Synchronous;
+                return Media.Synchronous;
             }
         }
 
@@ -651,7 +737,7 @@ namespace GuruxAMI.Gateway
         {
             get
             {
-                return Target.IsSynchronous;
+                return Media.IsSynchronous;
             }
         }
 
@@ -673,7 +759,7 @@ namespace GuruxAMI.Gateway
         {
             get 
             {
-                return Target.BytesSent; 
+                return Media.BytesSent; 
             }
         }
 
@@ -681,20 +767,20 @@ namespace GuruxAMI.Gateway
         {
             get 
             {
-                return Target.BytesReceived; 
+                return Media.BytesReceived; 
             }
         }
 
         public void ResetByteCounters()
         {
-            Target.ResetByteCounters();
+            Media.ResetByteCounters();
         }
 
         public void Validate()
         {
-            if (Target != null)
+            if (Media != null)
             {
-                Target.Validate();
+                Media.Validate();
             }
         }
 
@@ -702,30 +788,30 @@ namespace GuruxAMI.Gateway
         {
             get
             {
-                if (Target != null)
+                if (Media != null)
                 {
-                    return Target.Eop;
+                    return Media.Eop;
                 }
                 return null;
             }
             set
             {
-                if (Target != null)
+                if (Media != null)
                 {
-                    Target.Eop = value;
+                    Media.Eop = value;
                 }
             }
         }
 
-        public int ConfigurableSettings
+        int IGXMedia.ConfigurableSettings
         {
             get
             {
-                return Target.ConfigurableSettings;
+                return Media.ConfigurableSettings;
             }
             set
             {
-                Target.ConfigurableSettings = value;
+                Media.ConfigurableSettings = value;
             }
         }
 
@@ -736,15 +822,6 @@ namespace GuruxAMI.Gateway
         /// GuruxAMI host name.
         /// </summary>
         public string Host
-        {
-            get;
-            set;
-        }
-
-        /// <summary>
-        /// GuruxAMI Port number.
-        /// </summary>
-        public int Port
         {
             get;
             set;
@@ -769,6 +846,15 @@ namespace GuruxAMI.Gateway
         }
 
         /// <summary>
+        /// Get name of active DC.
+        /// </summary>
+        public string DataCollectorName
+        {
+            get;
+            internal set;
+        }
+
+        /// <summary>
         /// Data Collector where Device Profile is imported.
         /// </summary>
         public Guid DataCollector
@@ -778,9 +864,9 @@ namespace GuruxAMI.Gateway
         }
 
         /// <summary>
-        /// Data Collector Media.
+        /// Data Collector Media type.
         /// </summary>
-        public string Media
+        public string MediaName
         {
             get;
             set;

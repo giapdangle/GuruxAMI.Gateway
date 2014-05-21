@@ -1,7 +1,19 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 10.00
 # Visual Studio 2008
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GuruxAMI.Gateway", "GuruxAMI.Gateway_2008.csproj", "{06544420-4094-405E-96E9-1306133CBBC7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GuruxAMI.Gateway_2008", "GuruxAMI.Gateway_2008.csproj", "{06544420-4094-405E-96E9-1306133CBBC7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GuruxAMI.Client_2008", "..\GuruxAMI.Client\GuruxAMI.Client_2008.csproj", "{D4D7585E-0FB1-4C5F-BD92-303A5691B3A8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GuruxAMI.Common_2008", "..\GuruxAMI.Common\GuruxAMI.Common_2008.csproj", "{613F7B0E-2FCD-4DC6-9A64-E4D9E4BE56C4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gurux.Common_2008", "..\..\GXCom\Gurux.Common\Development\Gurux.Common_2008.csproj", "{749652D4-4779-4869-AD81-5211A661CD1B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gurux.Serial_2008", "..\..\GXCom\GXMedias\Gurux.Serial\Development\Gurux.Serial_2008.csproj", "{D07A57D7-F2E7-4A0F-95D1-EF3B1FD688F0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gurux.Terminal_2008", "..\..\GXCom\GXMedias\Gurux.Terminal\Development\Gurux.Terminal_2008.csproj", "{6210C774-782D-4292-AF4C-5998AC70BAFD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gurux.Communication_2008", "..\..\GXCom\Gurux.Communication\Development\Gurux.Communication_2008.csproj", "{BA05698E-DDAA-4D04-A6F0-6BC571805179}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,6 +25,30 @@ Global
 		{06544420-4094-405E-96E9-1306133CBBC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{06544420-4094-405E-96E9-1306133CBBC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{06544420-4094-405E-96E9-1306133CBBC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4D7585E-0FB1-4C5F-BD92-303A5691B3A8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4D7585E-0FB1-4C5F-BD92-303A5691B3A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4D7585E-0FB1-4C5F-BD92-303A5691B3A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4D7585E-0FB1-4C5F-BD92-303A5691B3A8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{613F7B0E-2FCD-4DC6-9A64-E4D9E4BE56C4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{613F7B0E-2FCD-4DC6-9A64-E4D9E4BE56C4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{613F7B0E-2FCD-4DC6-9A64-E4D9E4BE56C4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{613F7B0E-2FCD-4DC6-9A64-E4D9E4BE56C4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{749652D4-4779-4869-AD81-5211A661CD1B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{749652D4-4779-4869-AD81-5211A661CD1B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{749652D4-4779-4869-AD81-5211A661CD1B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{749652D4-4779-4869-AD81-5211A661CD1B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D07A57D7-F2E7-4A0F-95D1-EF3B1FD688F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D07A57D7-F2E7-4A0F-95D1-EF3B1FD688F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D07A57D7-F2E7-4A0F-95D1-EF3B1FD688F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D07A57D7-F2E7-4A0F-95D1-EF3B1FD688F0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6210C774-782D-4292-AF4C-5998AC70BAFD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6210C774-782D-4292-AF4C-5998AC70BAFD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6210C774-782D-4292-AF4C-5998AC70BAFD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6210C774-782D-4292-AF4C-5998AC70BAFD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BA05698E-DDAA-4D04-A6F0-6BC571805179}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BA05698E-DDAA-4D04-A6F0-6BC571805179}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BA05698E-DDAA-4D04-A6F0-6BC571805179}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BA05698E-DDAA-4D04-A6F0-6BC571805179}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
